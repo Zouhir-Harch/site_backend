@@ -1,5 +1,3 @@
-
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -15,6 +13,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FILES_DIR = os.path.join(BASE_DIR, "files")
 
@@ -22,10 +21,10 @@ os.makedirs(FILES_DIR, exist_ok=True)
 
 app = FastAPI(title="Générateur de CV et Page de Garde")
 
-# Configuration CORS
+# ✅ Configuration CORS pour Railway/Netlify
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["*"],  # ✅ Accepte toutes les origines pour Railway
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -134,6 +133,7 @@ def wrap_text(c, text, font_name, font_size, max_width):
         lines.append(current_line)
 
     return lines
+
 def draw_lettre_motivation(data: LettreMotivationData, filename: str):
     """Génère une lettre de motivation professionnelle"""
     c = canvas.Canvas(filename, pagesize=A4)
@@ -294,6 +294,7 @@ def draw_lettre_motivation(data: LettreMotivationData, filename: str):
     
     c.save()
     print(f"Lettre de motivation générée: {filename}")
+
 # Utilitaires pour la génération PDF
 def draw_page_de_garde(data: PageDeGardeData, filename: str):
     """Génère une page de garde académique conforme au modèle ENSA"""
@@ -321,15 +322,15 @@ def draw_page_de_garde(data: PageDeGardeData, filename: str):
 
     # ================== TYPE DE DOCUMENT ==================
     c.setFont("Helvetica-Bold", 13)
-    c.drawCentredString(width / 2, y, "Mémoire de Projet de Fin d’Étude")
+    c.drawCentredString(width / 2, y, "Mémoire de Projet de Fin d'Étude")
     y -= 0.7 * cm
 
     c.setFont("Helvetica", 10)
-    c.drawCentredString(width / 2, y, "Présenté en vue de l’obtention")
+    c.drawCentredString(width / 2, y, "Présenté en vue de l'obtention")
     y -= 0.6 * cm
 
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(width / 2, y, "du Diplôme d’Ingénieur d’État")
+    c.drawCentredString(width / 2, y, "du Diplôme d'Ingénieur d'État")
     y -= 0.6 * cm
 
     c.setFont("Helvetica", 10)
@@ -430,8 +431,6 @@ def draw_page_de_garde(data: PageDeGardeData, filename: str):
     )
 
     c.save()
-
-
 
 def draw_cv(data: CVData, filename: str):
     """Génère un CV 100% compatible ATS"""
@@ -566,11 +565,11 @@ def draw_cv(data: CVData, filename: str):
 
     c.save()
 
-
 # Routes API
 @app.get("/")
 def read_root():
-    return {"message": "API Générateur de CV et Page de Garde"}
+    return {"message": "API Générateur de CV et Page de Garde", "status": "online"}
+
 @app.post("/generate/lettre-motivation")
 async def generate_lettre_motivation(data: LettreMotivationData):
     """Génère une lettre de motivation professionnelle"""
@@ -584,11 +583,10 @@ async def generate_lettre_motivation(data: LettreMotivationData):
             f"lettre_motivation_{data.nom}_{data.prenom}_"
             f"{data.entreprise.replace(' ', '_')}.pdf"
         )
-        filepath = os.path.join(FILES_DIR, filename)  # ✅ Windows OK
+        filepath = os.path.join(FILES_DIR, filename)
 
         draw_lettre_motivation(data, filepath)
 
-        # Vérifier que le fichier existe
         if not os.path.exists(filepath):
             raise Exception("Le fichier PDF n'a pas été créé")
 
@@ -611,7 +609,7 @@ async def generate_page_de_garde(data: PageDeGardeData):
     """Génère une page de garde de rapport de stage"""
     try:
         filename = f"page_de_garde_{data.etudiant_nom}_{data.etudiant_prenom}.pdf"
-        filepath = os.path.join(FILES_DIR, filename)  # <-- ici on utilise FILES_DIR
+        filepath = os.path.join(FILES_DIR, filename)
 
         draw_page_de_garde(data, filepath)
 
@@ -621,15 +619,17 @@ async def generate_page_de_garde(data: PageDeGardeData):
             filename=filename
         )
     except Exception as e:
+        print(f"ERREUR PAGE DE GARDE: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/generate/cv")
 async def generate_cv(data: CVData):
     """Génère un CV professionnel"""
     try:
         filename = f"cv_{data.nom}_{data.prenom}.pdf"
-        filepath = os.path.join(FILES_DIR, filename)  # <-- ici aussi
+        filepath = os.path.join(FILES_DIR, filename)
 
         draw_cv(data, filepath)
 
@@ -639,14 +639,17 @@ async def generate_cv(data: CVData):
             filename=filename
         )
     except Exception as e:
+        print(f"ERREUR CV: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "message": "API is running"}
 
-
+# ✅ IMPORTANT pour Railway - Utilise la variable PORT
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))  # ✅ Railway utilise $PORT
+    uvicorn.run(app, host="0.0.0.0", port=port)
